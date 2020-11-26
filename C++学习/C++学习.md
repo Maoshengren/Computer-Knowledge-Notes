@@ -1474,28 +1474,42 @@ Blob<T> void Blob::menbership(T& i);
 
 
 
+****
 
+## C++复习
 
+1. 关于定义“struct A{int x; mutable int y;}const a={1,3};”，如下叙述哪个_________正确:
 
+      A. a.x可被赋值，a.y不可被赋值          B. a.x不可被赋值，a.y可被赋值
 
+      C. a.x和a.y均不可被赋值                	  D. a.x和a.y均可被赋值
 
+   - `mutable` - 容许在即便包含它的对象被声明为 const 时仍可修改声明为 mutable 的类成员。
 
+```c++
+const struct
+    {
+        int n1;
+        mutable int n2;
+    } x = {0, 0};      // 带 mutable 成员的 const 对象
+ 
+//  x.n1 = 4; // 错误：const 对象的成员为 const
+    x.n2 = 4; // ok，const 对象的 mutable 成员不是 const
+```
 
+2. 关于union定义的类的叙述_____正确:
 
+   - 联合体不能有基类且不能用作基类
 
+3. `int &f( ); int &&g( );`
 
+   - D.调用f()可被赋值，调用g()不可被赋值
 
+   - 表达式必须是可修改的左值
 
-
-
-
-
-
-
-
-
-
-
-const 函数不能在体内改变参数成员
-
-可以是临时对象，
+4. 对于定义 `struct A{ int f( ) ;} `，关于int前面是否可用static和virtual ：
+   - 编译器未报错
+   - 若同时用static 和virtual，`仅非静态成员函数可以是虚拟的`
+5. 对于定义“char *const &f( );”，如下哪个语句是错误的
+   - `f( )=(char*) "abcd"; `错误，表达式必须是可修改的左值
+6. 

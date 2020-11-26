@@ -1,4 +1,4 @@
-MySQL 数据类型
+**MySQL 数据类型**
 
 在 MySQL 中，有三种主要的类型：Text（文本）、Number（数字）和 Date/Time（日期/时间）类型。
 
@@ -3197,8 +3197,9 @@ SQL> DELETE FROM CUSTOMERS
 #### 1、4、14**SQL TRUNCATE TABLE 命令**
 
 - SQL **TRUNCATE TABLE** 命令用于删除现有数据表中的所有数据。
-  - 你也可以使用 DROP TABLE 命令来删除整个数据表，不过 DROP TABLE 命令不但会删除表中所有数据，还会将整个表结构从数据库中移除
-
+  
+- 你也可以使用 DROP TABLE 命令来删除整个数据表，不过 DROP TABLE 命令不但会删除表中所有数据，还会将整个表结构从数据库中移除
+  
 - **TRUNCATE TABLE** 的基本语法如下所示：
 
   ```
@@ -3342,7 +3343,7 @@ SQL> SELECT DISTINCT SALARY FROM CUSTOMERS
 
   　在SQL视图上也可以使用修改数据的DML语句，如 INSERT、UPDATE和DELETE。        
 
-  　视图可以在特定的情况下更新：
+    　视图可以在特定的情况下更新：
 
   - SELECT 子句不能包含 DISTINCT 关键字
   - SELECT 子句不能包含任何汇总函数（summary functions）
