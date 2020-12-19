@@ -1,4 +1,4 @@
-# Advanced Programming In Unix
+# cAdvanced Programming In Unix
 
 ## Thread
 
@@ -409,7 +409,8 @@ int pthread_mutex_destroy(pthread_mutex_t *mutex);
 - To initialize a mutex with the default attributes, we set attr to NULL.
 
 - To lock a mutex, we call **pthread_mutex_lock**. 
-  - If the mutex is already locked, the calling thread will block until the mutex is unlocked. To unlock a mutex, we call **pthread_mutex_unlock**.
+  - If the mutex is already locked, the calling thread will block until the mutex is unlocked. 
+  - To unlock a mutex, we call **pthread_mutex_unlock**.
 
 ```c
 #include <pthread.h>
@@ -473,3 +474,413 @@ void foo_rele(struct foo *fp) /* release a reference to the object */
 }
 ```
 
+****
+
+**Deadlock Avoidance**
+
+> We avoid deadlocks by ensuring that when we need to acquire two mutexes at the same time, we always lock them in the same order. 
+>
+> The second mutex protects a hash list that we use to keep track of the foo data structures. 
+>
+> Thus the hashlock mutex protects both the fh hash table and the f_next hash link field in the foo structure. 
+>
+> The f_lock mutex in the foo structure protects access to the remainder of the foo structure’s fields.
+
+```c
+#include <stdlib.h>
+#include <pthread.h>
+#define NHASH 29
+#define HASH(id) (((unsigned long)id)%NHASH)
+struct foo *fh[NHASH];
+pthread_mutex_t hashlock = PTHREAD_MUTEX_INITIALIZER;
+struct foo {
+    int f_count;
+    pthread_mutex_t f_lock;
+    int f_id;
+    struct foo *f_next; /* protected by hashlock */
+    /* ... more stuff here ... */
+};
+struct foo * foo_alloc(int id) /* allocate the object */
+{
+    struct foo *fp;
+    int idx;
+    if ((fp = malloc(sizeof(struct foo))) != NULL) {
+        fp->f_count = 1;
+        fp->f_id = id;
+        if (pthread_mutex_init(&fp->f_lock, NULL) != 0) {
+            free(fp);
+            return(NULL);
+        }
+        idx = HASH(id);
+        pthread_mutex_lock(&hashlock);	//Initialize the structure array
+        fp->f_next = fh[idx];
+        fh[idx] = fp;
+        pthread_mutex_lock(&fp->f_lock);
+        pthread_mutex_unlock(&hashlock);
+        /* ... continue initialization ... */
+        pthread_mutex_unlock(&fp->f_lock);
+    }
+    return(fp);
+}
+void foo_hold(struct foo *fp) /* add a reference to the object */
+{
+    pthread_mutex_lock(&fp->f_lock);
+    fp->f_count++;
+    pthread_mutex_unlock(&fp->f_lock);
+}
+struct foo *foo_find(int id) /* find an existing object */
+{
+    struct foo *fp;
+    pthread_mutex_lock(&hashlock);
+    for (fp = fh[HASH(id)]; fp != NULL; fp = fp->f_next) {
+        if (fp->f_id == id) {
+            foo_hold(fp);
+            break;
+        }
+	}
+    pthread_mutex_unlock(&hashlock);
+    return(fp);
+}
+void foo_rele(struct foo *fp) /* release a reference to the object */
+{
+    struct foo *tfp;
+    int idx;
+    pthread_mutex_lock(&fp->f_lock);
+    if (fp->f_count == 1) { /* last reference */
+        pthread_mutex_unlock(&fp->f_lock);
+        pthread_mutex_lock(&hashlock);
+        pthread_mutex_lock(&fp->f_lock);
+        /* need to recheck the condition */
+        if (fp->f_count != 1) {
+            fp->f_count--;
+            pthread_mutex_unlock(&fp->f_lock);
+            pthread_mutex_unlock(&hashlock);
+            return;
+        }
+        /* remove from list */
+        idx = HASH(fp->f_id);
+        tfp = fh[idx];
+        if (tfp == fp) {
+        	fh[idx] = fp->f_next;
+        } 
+        else {
+            while (tfp->f_next != fp)
+            	tfp = tfp->f_next;
+            tfp->f_next = fp->f_next;
+        }
+        pthread_mutex_unlock(&hashlock);
+        pthread_mutex_unlock(&fp->f_lock);
+        pthread_mutex_destroy(&fp->f_lock);
+        free(fp);
+    } 
+    else {
+        fp->f_count--;
+        pthread_mutex_unlock(&fp->f_lock);
+    }
+}
+```
+
+>If this is the last reference, we need to ***unlock the structure mutex*** so that we can ***acquire the hash list lock***, since we’ll need to remove the structure from the hash list. Then we reacquire the structure mutex. 
+>
+>Because we could have blocked since the last time we held the structure mutex, we need to **recheck** the condition to see whether we still need to free the structure. If another thread found the structure and added a reference to it while we blocked to honor the lock ordering, we simply need to decrement the reference count, unlock everything, and return.
+
+- This locking approach is complex, so we need to revisit our design. We can simplify things considerably by using the hash list lock to protect the structure reference count, too. 
+- The structure mutex can be used to protect everything else in the foo structure.
+
+```c
+#include <stdlib.h>
+#include <pthread.h>
+#define NHASH 29
+#define HASH(id) (((unsigned long)id)%NHASH)
+struct foo *fh[NHASH];
+pthread_mutex_t hashlock = PTHREAD_MUTEX_INITIALIZER;
+struct foo {
+    int f_count; /* protected by hashlock */
+    pthread_mutex_t f_lock;
+    int f_id;
+    struct foo *f_next; /* protected by hashlock */
+    /* ... more stuff here ... */
+};
+struct foo *foo_alloc(int id) /* allocate the object */
+{
+    struct foo *fp;
+    int idx;
+    if ((fp = malloc(sizeof(struct foo))) != NULL) {
+        fp->f_count = 1;
+        fp->f_id = id;
+        if (pthread_mutex_init(&fp->f_lock, NULL) != 0) {
+        	free(fp);
+        	return(NULL);
+        }
+        idx = HASH(id);
+        pthread_mutex_lock(&hashlock);
+        fp->f_next = fh[idx];
+        fh[idx] = fp;
+        pthread_mutex_lock(&fp->f_lock);
+        pthread_mutex_unlock(&hashlock);
+        /* ... continue initialization ... */
+        pthread_mutex_unlock(&fp->f_lock);
+    }
+    return(fp);
+}
+void foo_hold(struct foo *fp) /* add a reference to the object */
+{
+    pthread_mutex_lock(&hashlock);
+    fp->f_count++;
+    pthread_mutex_unlock(&hashlock);
+}
+struct foo *foo_find(int id) /* find an existing object */
+{
+    struct foo *fp;
+    pthread_mutex_lock(&hashlock);
+    for (fp = fh[HASH(id)]; fp != NULL; fp = fp->f_next) {
+        if (fp->f_id == id) {
+        fp->f_count++;
+        break;
+        }
+    }
+    pthread_mutex_unlock(&hashlock);
+    return(fp);
+}
+void foo_rele(struct foo *fp) /* release a reference to the object */
+{
+    struct foo *tfp;
+    int idx;
+    pthread_mutex_lock(&hashlock);
+    if (--fp->f_count == 0) { /* last reference, remove from list */
+        idx = HASH(fp->f_id);
+        tfp = fh[idx];
+        if (tfp == fp) {
+            fh[idx] = fp->f_next;
+        } 
+        else {
+        	while (tfp->f_next != fp)
+            	tfp = tfp->f_next;
+        	tfp->f_next = fp->f_next;
+        }
+        pthread_mutex_unlock(&hashlock);
+        pthread_mutex_destroy(&fp->f_lock);
+        free(fp);
+    } 
+    else {
+    pthread_mutex_unlock(&hashlock);
+    }
+}
+```
+
+***
+
+**pthread_mutex_timedlock Function**
+
+> One additional mutex primitive allows us to ***bound the time*** that a thread blocks when a mutex it is trying to acquire is already locked. 
+>
+> The pthread_mutex_timedlock function is equivalent to pthread_mutex_lock, but if the timeout value is reached, pthread_mutex_timedlock will return the error code **ETIMEDOUT** without locking the mutex.
+
+```c
+#include <pthread.h>
+#include <time.h>
+int pthread_mutex_timedlock(pthread_mutex_t *restrict mutex,
+						  const struct timespec *restrict tsptr);
+								    Returns: 0 if OK, error number on failure
+```
+
+**Example**
+In Figure 11.13, we see how to use pthread_mutex_timedlock to avoid blocking indefinitely.
+
+```c
+#include "apue.h"
+#include <pthread.h>
+int main(void)
+{
+    int err;
+    struct timespec tout;
+    struct tm *tmp;
+    char buf[64];
+    pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    pthread_mutex_lock(&lock);
+    printf("mutex is locked\n");
+    clock_gettime(CLOCK_REALTIME, &tout);
+    tmp = localtime(&tout.tv_sec);
+    strftime(buf, sizeof(buf), "%r", tmp);
+    printf("current time is %s\n", buf);
+    tout.tv_sec += 10;
+    /* 10 seconds from now */
+    /* caution: this could lead to deadlock */
+    err = pthread_mutex_timedlock(&lock, &tout);
+    clock_gettime(CLOCK_REALTIME, &tout);
+    tmp = localtime(&tout.tv_sec);
+    strftime(buf, sizeof(buf), "%r", tmp);
+    printf("the time is now %s\n", buf);
+    if (err == 0)
+    	printf("mutex locked again!\n");
+    else
+    	printf("can’t lock mutex again: %s\n", strerror(err));
+    exit(0);
+}
+```
+
+Output:
+
+```c
+mutex is locked
+current time is 11:41:58 AM
+the time is now 11:42:08 AM
+can’t lock mutex again: Connection timed out
+```
+
+***
+
+#### **Reader–Writer Locks**
+
+>Reader–writer locks are similar to mutexes, except that they allow for higher degrees of parallelism. 
+>
+>Only ***one thread*** at a time can hold a reader–writer lock in ***write mode***, but ***multiple threads*** can hold a reader–writer lock in ***read mode*** at the same time.
+
+- Reader–writer locks are well suited for situations in which data structures are read more often than they are modified. 
+
+- As with mutexes, reader–writer locks must be initialized before use and destroyed before freeing their underlying memory.
+
+```c
+#include <pthread.h>
+int pthread_rwlock_init(pthread_rwlock_t *restrict rwlock,
+					   const pthread_rwlockattr_t *restrict attr);
+int pthread_rwlock_destroy(pthread_rwlock_t *rwlock);
+							Both return: 0 if OK, error number on failure
+```
+
+- To lock a reader–writer lock in read mode, we call **pthread_rwlock_rdlock**. 
+- To write lock a reader–writer lock, we call **pthread_rwlock_wrlock**. 
+- Regardless of how we lock a reader–writer lock, we can unlock it by calling **pthread_rwlock_unlock**.
+
+````c
+#include <pthread.h>
+int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_unlock(pthread_rwlock_t *rwlock);
+							  All return: 0 if OK, error number on failure
+````
+
+- Implementations might place a limit on ***the number of times a reader–writer lock*** can be locked in shared mode, so we need to check the return value of **pthread_rwlock_rdlock**.
+
+- The Single UNIX Specification also defines conditional versions of the reader–writer locking primitives.
+
+```c
+#include <pthread.h>
+int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock);
+int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock);
+						     Both return: 0 if OK, error number on failure
+```
+
+**Example**
+
+- The program in Figure 11.14 illustrates the use of reader–writer locks. A queue of job requests is protected by a single reader–writer lock. 
+
+````c
+#include <stdlib.h>
+#include <pthread.h>
+struct job {
+    struct job *j_next;
+    struct job *j_prev;
+    pthread_t j_id;
+    /* tells which thread handles this job */
+    /* ... more stuff here ... */
+};
+struct queue {
+    struct job *q_head;
+    struct job *q_tail;
+    pthread_rwlock_t q_lock;
+};
+/* Initialize a queue. */
+int queue_init(struct queue *qp)
+{
+    int err;
+    qp->q_head = NULL;
+    qp->q_tail = NULL;
+    err = pthread_rwlock_init(&qp->q_lock, NULL);
+    if (err != 0)
+    	return(err);
+    /* ... continue initialization ... */
+    return(0);
+}
+/* Insert a job at the head of the queue.*/
+void job_insert(struct queue *qp, struct job *jp)
+{
+    pthread_rwlock_wrlock(&qp->q_lock);	//aquire a write lock
+    jp->j_next = qp->q_head;	//insert the job at the head
+    jp->j_prev = NULL;
+    if (qp->q_head != NULL)
+    	qp->q_head->j_prev = jp;
+    else
+    	qp->q_tail = jp;
+    /* list was empty */
+    qp->q_head = jp;
+    pthread_rwlock_unlock(&qp->q_lock);	//release the write lock 
+}
+/* Append a job on the tail of the queue. */
+void job_append(struct queue *qp, struct job *jp)
+{
+    pthread_rwlock_wrlock(&qp->q_lock);	//aquire a write lock
+    jp->j_next = NULL;
+    jp->j_prev = qp->q_tail;	//insert a job on the tail
+    if (qp->q_tail != NULL)
+    	qp->q_tail->j_next = jp;
+    else
+    	qp->q_head = jp;
+    /* list was empty */
+    qp->q_tail = jp;
+    pthread_rwlock_unlock(&qp->q_lock);	//release the lock 
+}
+/* Remove the given job from a queue.*/
+void job_remove(struct queue *qp, struct job *jp)
+{
+    pthread_rwlock_wrlock(&qp->q_lock); //aquire a write lock
+    if (jp == qp->q_head) {
+        qp->q_head = jp->j_next;
+        if (qp->q_tail == jp)
+        	qp->q_tail = NULL;
+        else
+        	jp->j_next->j_prev = jp->j_prev;
+    } 
+    else if (jp == qp->q_tail) {
+        qp->q_tail = jp->j_prev;
+        jp->j_prev->j_next = jp->j_next;
+    } 
+    else {
+        jp->j_prev->j_next = jp->j_next;
+        jp->j_next->j_prev = jp->j_prev;
+    }
+    pthread_rwlock_unlock(&qp->q_lock); //release the lock 
+}
+/* Find a job for the given thread ID.*/
+struct job *job_find(struct queue *qp, pthread_t id)
+{
+    struct job *jp;
+    if (pthread_rwlock_rdlock(&qp->q_lock) != 0) //aquire a read lock
+    	return(NULL);
+    for (jp = qp->q_head; jp != NULL; jp = jp->j_next)
+    	if (pthread_equal(jp->j_id, id))
+    		break;
+    pthread_rwlock_unlock(&qp->q_lock); //release the lock 
+    return(jp);
+}
+````
+
+***
+
+**Reader–Writer Locking with Timeouts**
+
+>The Single UNIX Specification provides functions to lock reader–writer locks with a timeout to give applications a way to avoid blocking indefinitely. 
+
+- These functions are **pthread_rwlock_timedrdlock** and **pthread_rwlock_timedwrlock**.
+
+```c
+#include <pthread.h>
+#include <time.h>
+int pthread_rwlock_timedrdlock(pthread_rwlock_t *restrict rwlock,
+							 const struct timespec *restrict tsptr);
+int pthread_rwlock_timedwrlock(pthread_rwlock_t *restrict rwlock,
+							 const struct timespec *restrict tsptr);
+							 Both return: 0 if OK, error number on failure
+```
+
+**Condition Variables**
