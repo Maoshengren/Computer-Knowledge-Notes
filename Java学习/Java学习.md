@@ -46,7 +46,7 @@ int intValue = input.nextInt();
 System.out.print("Enter a 1ong value: ");
 long 1ongValue = input.nextLong() ;
 System.out.print("Enter a float value: ") ;
-float floatValue = input.nextF1oat();
+float floatValue = input.nextFloat();
 ```
 
 <img src="C:\Users\13793\Desktop\学习笔记\Java学习\1.png" style="zoom:50%;" />
@@ -125,8 +125,8 @@ x = x / (4 + 5.5 * 1.5);
 
 - **指数函数方法**
   - <img src="C:\Users\13793\Desktop\学习笔记\Java学习\5.png" style="zoom:67%;" />
-  - Math.exp(l) 返回 2.71828
-    Math,log(Math.E) 返回 1.0
+  - Math.exp(1) 返回 2.71828
+    Math.log(Math.E) 返回 1.0
     Math.log10(10) 返回 1.0
     Math.pow(2, 3) 返回 8.0
     Math.pow(3, 2) 返回 9.0
@@ -978,15 +978,15 @@ for (int i = 0; i < tokens.length; i++)
   `public class Circle extends CeometricObject`
 
 ```java
-public class RectangleFromSimpleGeometric0bject
+public class RectangleFromSimpleGeometricObject
 	extends SimpleGeometricObject {
-    private double wi dth;
-    private double hei ght;
-    public RectangleFromSimpleGeometri c0bject() {
+    private double width;
+    private double height;
+    public RectangleFromSimpleGeometricObject() {
     }
-    pub1ic RectangleF romSimpleGeometri c0bject(
+    pub1ic RectangleFromSimpleGeometricObject(
     double width, double height) {
-        this .width = width;
+        this.width = width;
         this.height = height;
     }
 }
@@ -1069,9 +1069,9 @@ public class RectangleFromSimpleGeometric0bject
   ```java
   pub1ic class Faculty extends Employee {
       public static void main(String[] args) {
-      	new FacultyO ;
+      	new FacultyO;
       }
-      public FacultyO) {
+      public Faculty(){
       	System.out.printIn("(4) Performs Faculty's tasks");
       }
       class Employee extends Person {
@@ -1910,7 +1910,7 @@ public abstract class Geometricobject {
 ***
 
 - 抽象方法不能包含在非抽象类中。
-  - 如果抽象父类的子类不能实现所有的抽象方法，那么子类也必须定义为抽象的。
+  - 如果抽象父类的子类**不能实现所有的抽象方法**，那么子类也必须定义为**抽象的**。
   - 换句话说，在抽象类扩展的非抽象子类中，必须实现所有的抽象方法
 - 抽象类是不能使用 new 操作符来初始化的。
   - 但是，仍然可以定义它的构造方法，这个构造方法在它的子类的构造方法中调用
@@ -1927,12 +1927,12 @@ public abstract class Geometricobject {
 
 - 接口是一种与类相似的结构，只包含常量和抽象方法
 
-- 它的目的是指明相关或者不相关类的多个对象的共同行为。例如，使用正确的接口，可以指明这些对象是可比较的、可食用的，以及可克隆的
+- 它的目的是**指明相关或者不相关类的多个对象的共同行为**。例如，使用正确的接口，可以指明这些对象是可比较的、可食用的，以及可克隆的
 
 - 为了区分接口和类，Java 采用下面的语法来定义接口：
 
   ```java
-  修饰符interface 接口名 {
+  修饰符 interface 接口名 {
       /**常董声明*/
       /**方法签名*/
   }

@@ -47,7 +47,7 @@
 
 ***
 
-### 1、1**SQL RDBMS 概念**
+### 1.1 **SQL RDBMS 概念**
 
 - RDBMS是关系数据库管理系统(**Relational Database Management System**)的缩写。
 
@@ -83,6 +83,7 @@
   - 字段是表中的列，用于维护有关表中每条记录的特定信息。
 
 - **记录、行数据**
+  
   - 记录也称为数据行，即表中存在的每个单独的条目。例如，上面的Customers表中有7条记录。
   - 下面是Customers表中的单行数据或记录。
 
@@ -145,7 +146,7 @@
 
 ***
 
-### 1、2SQL语法
+### 1.2 SQL语法
 
 - **SQL 语法规则**
   - SQL语句总是以关键字开始，如SELECT、INSERT、UPDATE、DELETE、DROP、CREATE。
@@ -403,7 +404,7 @@ ROLLBACK;
 
 ***
 
-#### 1、2、1SQL选择
+#### 1.2.1 SQL选择
 
 - SELECT 语法用于从数据库中选择数据。     
 - 返回的数据存储在结果表中，称为结果集。
@@ -452,7 +453,7 @@ SELECT * FROM table_name;
 
 ***
 
-#### 1、2、2SQL选择不同
+#### 1.2.2 SQL选择不同
 
 - SELECT DISTINCT语法用于仅返回不同的（different）值。
 
@@ -469,7 +470,7 @@ SELECT * FROM table_name;
 
 ***
 
-#### 1、2、3**SQL WHERE Clause（查询子句）**
+#### 1.2.3 **SQL WHERE Clause**
 
 - WHERE 子句用于过滤记录。
 
@@ -537,7 +538,7 @@ SELECT * FROM table_name;
 
 ***
 
-#### 1、2、4**SQL AND, OR and NOT（与，或不是运算符）**
+#### 1.2.4 **SQL AND, OR and NOT**
 
 - AND&OR运算符用于根据一个以上的条件过滤记录，即用于组合多个条件以缩小SQL语句中的数据。
 
@@ -600,7 +601,7 @@ WHERE NOT condition;
 
 ***
 
-#### 1、2、5**SQL ORDER BY Keyword（按关键字排序）**
+#### 1.2.5 **SQL ORDER BY Keyword**
 
 - ORDER BY 关键字用于按升序或降序对结果集进行排序
 - ORDER BY 关键字默认情况下按升序排序记录
@@ -616,7 +617,7 @@ ORDER BY column1, column2, ... ASC|DESC;
 
 ***
 
-#### 1、2、6**SQL INSERT INTO 语句（在表中插入）**
+#### 1.2.6**SQL INSERT INTO**
 
 - **SQL INSERT INTO 语法**
 
@@ -666,7 +667,7 @@ VALUES ('Cardinal', 'Stavanger', 'Norway');
 
 ***
 
-#### 1、2、7**SQL NULL Values（空值）**
+#### 1.2.7 **SQL NULL Values**
 
 - SQL 中，**NULL** 用于表示缺失的值。数据表中的 NULL 值表示该值所处的字段为空。
 - 具有NULL值的字段是没有值的字段。
@@ -753,7 +754,7 @@ SQL> CREATE TABLE CUSTOMERS(
 
 ***
 
-#### 1、2、8SQL更新
+#### 1.2.8 SQL更新
 
 - UPDATE 语句用于更新表中已存在的记录。
 - 还可以使用AND或OR运算符组合多个条件。
@@ -788,7 +789,7 @@ SQL> CREATE TABLE CUSTOMERS(
 
 ***
 
-#### 1、2、9**SQL Delete 语句**
+#### 1.2.9 **SQL Delete **
 
 -  DELETE语句用于删除表中现有记录。
 
@@ -843,7 +844,7 @@ WHERE CustomerName='Alfreds Futterkiste';
 
 ***
 
-#### 1、2、10SQL运算符
+#### 1.2.10 SQL运算符
 
 - 运算符是保留字或主要用于SQL语句的WHERE子句中的字符，用于执行操作，例如：比较和算术运算。 这些运算符用于指定SQL语句中的条件，并用作语句中多个条件的连词
 
@@ -895,7 +896,7 @@ WHERE CustomerName='Alfreds Futterkiste';
 
 ***
 
-#### 1、2、11SQL表达式
+#### 1.2.11 SQL表达式
 
 - 表达式是计算值的一个或多个值、运算符和SQL函数的组合。这些SQL表达式类似于公式，它们是用查询语言编写的
 
@@ -1020,7 +1021,7 @@ SQL>  SELECT  GETDATE();;
 1 row in set (0.00 sec)
 ```
 
-#### 1、2、12**SQL 选择数据库 USE语句**
+#### 1.2.12 **SQL 选择数据库 USE**
 
 - 当SQL Schema中有多个数据库时，在开始操作之前，需要选择一个执行所有操作的数据库。
 - SQL USE语句用于选择SQL架构中的任何现有数据库。
@@ -1058,9 +1059,9 @@ SQL> SHOW DATABASES;
 
 ***
 
-### 1、3SQL高级教程
+### 1.3 SQL高级教程
 
-#### 1、3、1**SQL SELECT TOP, LIMIT, ROWNUM**
+#### 1.3.1 **SQL SELECT TOP, LIMIT, ROWNUM**
 
 - SELECT TOP 子句用于指定要返回的**记录数量**
 - SELECT TOP子句在包含数千条记录的大型表上很有用。返回大量记录会影响性能。
@@ -1136,7 +1137,7 @@ LIMIT number;
 
 ***
 
-#### 1、3、2**SQL LIKE 运算符**
+#### 1.3.2 **SQL LIKE 运算符**
 
 - 在WHERE子句中使用LIKE运算符来搜索列中的指定模式
 
@@ -1252,7 +1253,7 @@ LIMIT number;
 
 ***
 
-#### 1、3、3**SQL Wildcards 通配符**
+#### 1.3.3 **SQL Wildcards 通配符**
 
 - 通配符用于替换字符串中的任何其他字符。            
 
@@ -1337,7 +1338,7 @@ WHERE City NOT LIKE '[bsp]%';
 
 ***
 
-#### 1、3、4**SQL IN 运算符**
+#### 1.3.4 **SQL IN 运算符**
 
 - IN运算符允许您在WHERE子句中指定多个值。 
 
@@ -1392,7 +1393,7 @@ WHERE City NOT LIKE '[bsp]%';
 
 ***
 
-#### 1、3、5**SQL BETWEEN运算符**
+#### 1.3.5 **SQL BETWEEN**
 
 - BETWEEN运算符用于选取介于两个值之间的数据范围内的值。
 - BETWEEN运算符选择给定范围内的值。值可以是数字，文本或日期。
@@ -1485,7 +1486,7 @@ WHERE OrderDate BETWEEN #07/04/1996# AND #07/09/1996#;
 
 ***
 
-#### 1、3、6**SQL 通用数据类型**
+#### 1.3.6 **SQL 通用数据类型**
 
 - 数据库表中的每一列都需要有一个名称和数据类型。
   - SQL 开发人员必须在创建 SQL 表时决定表中的每个列将要存储的数据的类型。数据类型是一个标签，是便于 SQL 了解每个列期望存储什么类型的数据的指南，它也标识了 SQL 如何与存储的数据进行交互。
@@ -1533,7 +1534,7 @@ WHERE OrderDate BETWEEN #07/04/1996# AND #07/09/1996#;
 
 ***
 
-#### 1、3、7**SQL Join连接**
+#### 1.3.7 **SQL Join**
 
 - SQL join 用于把来自两个或多个表的行结合起来
 
@@ -1587,7 +1588,7 @@ ON Orders.CustomerID=Customers.CustomerID;
 
 ***
 
-#### 1、3、8SQL INNER JOIN 关键字（内部连接）
+#### 1.3.8 SQL INNER JOIN 
 
 - 内部链接**INNER JOIN**关键字选择两个表中具有匹配值的记录。
 
@@ -1616,10 +1617,10 @@ ON Orders.CustomerID=Customers.CustomerID;
 | 10310   | 77         | 8          | 1996-09-20 | 2         |
 
 ```sql
-SELECT Customers.CustomerName,Orders.OrderID;
-FROM Customers;
-INNER JOIN Orders;
-ON Customers.CustomerID=Orders.CustomerID;
+SELECT Customers.CustomerName,Orders.OrderID
+FROM Customers
+INNER JOIN Orders
+ON Customers.CustomerID=Orders.CustomerID
 ORDER BY Customers.CustomerName;
 ```
 
@@ -1627,7 +1628,7 @@ ORDER BY Customers.CustomerName;
 
 ***
 
-#### 1、3、9**SQL UNION 运算符**
+#### 1.3.9 **SQL UNION **
 
 - UNION运算符用于组合两个或更多SELECT语句的结果集，而不返回任何重复的行  
   - UNION中的每个SELECT语句必须具有相同的列数
@@ -1683,7 +1684,7 @@ SELECT column_name(s) FROM table2
 
 ***
 
-#### 1、3、10**SQL SELECT INTO 语句**
+#### 1.3.10 **SQL SELECT INTO**
 
 - **SQL SELECT INTO 语法** 
 
