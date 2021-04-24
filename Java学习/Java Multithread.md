@@ -605,3 +605,962 @@ ThreadA输出：A
 ThreadB输出：B
 ```
 
+### Threadlocal
+
+```java
+/**
+ * 此类提供线程局部变量。
+ * 这些变量与普通变量不同，因为每个访问一个线程（通过其get或set方法）的线程都有其
+ * 自己的，独立初始化的变量副本。 
+ * ThreadLocal实例通常是希望将 状态与线程关联的类 中的私有静态字段（例如，用户ID或交易ID）。
+ * 例如，下面的类生成每个线程本地的唯一标识符。
+ * 线程的ID是在第一次调用ThreadId.get()时分配的，并且在以后的调用中保持不变。
+ * 只要线程是活动的并且ThreadLocal实例是可访问的，则每个线程都对其线程局部变量的副本持有隐式引用。
+ * 线程消失后，其线程本地实例的所有副本都将进行垃圾回收（除非存在对这些副本的其他引用）。
+ */
+public class ThreadLocal<T> {
+    /**
+     * ThreadLocals rely on per-thread linear-probe hash maps attached
+     * to each thread (Thread.threadLocals and
+     * inheritableThreadLocals).  The ThreadLocal objects act as keys,
+     * searched via threadLocalHashCode.  This is a custom hash code
+     * (useful only within ThreadLocalMaps) that eliminates collisions
+     * in the common case where consecutively constructed ThreadLocals
+     * are used by the same threads, while remaining well-behaved in
+     * less common cases.
+     * 通过每个线程的线性探针哈希 附着到每个线程上
+     */
+    private final int threadLocalHashCode = nextHashCode();
+
+    /**
+     * The next hash code to be given out. Updated atomically. Starts at
+     * zero.
+     */
+    private static AtomicInteger nextHashCode =
+        new AtomicInteger();
+
+    /**
+     * The difference between successively generated hash codes - turns
+     * implicit sequential thread-local IDs into near-optimally spread
+     * multiplicative hash values for power-of-two-sized tables.
+     * 0110 0001 1100 1000 1000 0110 0100 0111
+     * 这个值很特殊，它是斐波那契数 也叫 黄金分割数。hash增量为 这个数字，
+     * 带来的好处就是 hash 分布非常均匀。
+     */
+    private static final int HASH_INCREMENT = 0x61c88647;
+    
+    /**
+     * Returns the next hash code.
+     */
+    private static int nextHashCode() {
+        return nextHashCode.getAndAdd(HASH_INCREMENT);
+    }
+    
+--------------------------------------------------------------------------------------------
+    /**
+     * Sets the current thread's copy of this thread-local variable
+     * to the specified value.  Most subclasses will have no need to
+     * override this method, relying solely on the {@link #initialValue}
+     * method to set the values of thread-locals.
+     *
+     * @param value the value to be stored in the current thread's copy of
+     *        this thread-local.
+     */
+    public void set(T value) {
+        Thread t = Thread.currentThread();
+        ThreadLocalMap map = getMap(t);
+        if (map != null) {
+            map.set(this, value);
+        } else {
+            createMap(t, value);
+        }
+    }
+    
+    private void set(ThreadLocal<?> key, Object value) {
+
+        // We don't use a fast path as with get() because it is at
+        // least as common to use set() to create new entries as
+        // it is to replace existing ones, in which case, a fast
+        // path would fail more often than not.
+
+        Entry[] tab = table;
+        int len = tab.length;
+        int i = key.threadLocalHashCode & (len-1);
+
+        for (Entry e = tab[i];
+             e != null;
+             e = tab[i = nextIndex(i, len)]) {
+            ThreadLocal<?> k = e.get();
+
+            if (k == key) {
+                e.value = value;
+                return;
+            }
+
+            if (k == null) {
+                replaceStaleEntry(key, value, i);
+                return;
+            }
+        }
+
+        tab[i] = new Entry(key, value);
+        int sz = ++size;
+        if (!cleanSomeSlots(i, sz) && sz >= threshold)
+            rehash();
+    }
+    
+    
+    /**
+         * Re-pack and/or re-size the table. First scan the entire
+         * table removing stale entries. If this doesn't sufficiently
+         * shrink the size of the table, double the table size.
+         */
+    private void rehash() {
+        expungeStaleEntries();
+
+        // Use lower threshold for doubling to avoid hysteresis
+        if (size >= threshold - threshold / 4)
+            resize();
+    }
+    
+    /**
+     * Expunge all stale entries in the table.
+     */
+    private void expungeStaleEntries() {
+        Entry[] tab = table;
+        int len = tab.length;
+        for (int j = 0; j < len; j++) {
+            Entry e = tab[j];
+            if (e != null && e.get() == null)
+                expungeStaleEntry(j);
+        }
+    }
+    
+    
+    /**
+         * Replace a stale entry encountered during a set operation
+         * with an entry for the specified key.  The value passed in
+         * the value parameter is stored in the entry, whether or not
+         * an entry already exists for the specified key.
+         *
+         * As a side effect, this method expunges all stale entries in the
+         * "run" containing the stale entry.  (A run is a sequence of entries
+         * between two null slots.)
+         *
+         * @param  key the key
+         * @param  value the value to be associated with key
+         * @param  staleSlot index of the first stale entry encountered while
+         *         searching for key.
+         */
+    private void replaceStaleEntry(ThreadLocal<?> key, Object value,
+                                   int staleSlot) {
+        Entry[] tab = table;
+        int len = tab.length;
+        Entry e;
+
+        // Back up to check for prior stale entry in current run.
+        // We clean out whole runs at a time to avoid continual
+        // incremental rehashing due to garbage collector freeing
+        // up refs in bunches (i.e., whenever the collector runs).
+        int slotToExpunge = staleSlot;
+        for (int i = prevIndex(staleSlot, len);
+             (e = tab[i]) != null;
+             i = prevIndex(i, len))
+            if (e.get() == null)
+                slotToExpunge = i;
+
+        // Find either the key or trailing null slot of run, whichever
+        // occurs first
+        for (int i = nextIndex(staleSlot, len);
+             (e = tab[i]) != null;
+             i = nextIndex(i, len)) {
+            ThreadLocal<?> k = e.get();
+
+            // If we find key, then we need to swap it
+            // with the stale entry to maintain hash table order.
+            // The newly stale slot, or any other stale slot
+            // encountered above it, can then be sent to expungeStaleEntry
+            // to remove or rehash all of the other entries in run.
+            if (k == key) {
+                e.value = value;
+
+                tab[i] = tab[staleSlot];
+                tab[staleSlot] = e;
+
+                // Start expunge at preceding stale entry if it exists
+                if (slotToExpunge == staleSlot)
+                    slotToExpunge = i;
+                cleanSomeSlots(expungeStaleEntry(slotToExpunge), len);
+                return;
+            }
+
+            // If we didn't find stale entry on backward scan, the
+            // first stale entry seen while scanning for key is the
+            // first still present in the run.
+            if (k == null && slotToExpunge == staleSlot)
+                slotToExpunge = i;
+        }
+
+        // If key not found, put new entry in stale slot
+        tab[staleSlot].value = null;
+        tab[staleSlot] = new Entry(key, value);
+
+        // If there are any other stale entries in run, expunge them
+        if (slotToExpunge != staleSlot)
+            cleanSomeSlots(expungeStaleEntry(slotToExpunge), len);
+    }
+    
+    
+    /**
+         * Expunge a stale entry by rehashing any possibly colliding entries
+         * lying between staleSlot and the next null slot.  This also expunges
+         * any other stale entries encountered before the trailing null.  See
+         * Knuth, Section 6.4
+         *
+         * @param staleSlot index of slot known to have null key
+         * @return the index of the next null slot after staleSlot
+         * (all between staleSlot and this slot will have been checked
+         * for expunging).
+         */
+    private int expungeStaleEntry(int staleSlot) {
+        Entry[] tab = table;
+        int len = tab.length;
+
+        // expunge entry at staleSlot
+        tab[staleSlot].value = null;
+        tab[staleSlot] = null;
+        size--;
+
+        // Rehash until we encounter null
+        Entry e;
+        int i;
+        for (i = nextIndex(staleSlot, len);
+             (e = tab[i]) != null;
+             i = nextIndex(i, len)) {
+            ThreadLocal<?> k = e.get();
+            if (k == null) {
+                e.value = null;
+                tab[i] = null;
+                size--;
+            } else {
+                int h = k.threadLocalHashCode & (len - 1);
+                if (h != i) {
+                    tab[i] = null;
+
+                    // Unlike Knuth 6.4 Algorithm R, we must scan until
+                    // null because multiple entries could have been stale.
+                    while (tab[h] != null)
+                        h = nextIndex(h, len);
+                    tab[h] = e;
+                }
+            }
+        }
+        return i;
+    }
+--------------------------------------------------------------------------------------------
+    
+    /**
+     * Returns the value in the current thread's copy of this
+     * thread-local variable.  If the variable has no value for the
+     * current thread, it is first initialized to the value returned
+     * by an invocation of the {@link #initialValue} method.
+     *
+     * @return the current thread's value of this thread-local
+     */
+    public T get() {
+        Thread t = Thread.currentThread();
+        ThreadLocalMap map = getMap(t);
+        if (map != null) {
+            ThreadLocalMap.Entry e = map.getEntry(this);
+            if (e != null) {
+                @SuppressWarnings("unchecked")
+                T result = (T)e.value;
+                return result;
+            }
+        }
+        return setInitialValue();
+    }
+    
+    /**
+     * Get the map associated with a ThreadLocal. Overridden in
+     * InheritableThreadLocal.
+     *
+     * @param  t the current thread
+     * @return the map
+     */
+    ThreadLocalMap getMap(Thread t) {
+        return t.threadLocals;
+    }
+    
+    /**
+     * Create the map associated with a ThreadLocal. Overridden in
+     * InheritableThreadLocal.
+     *
+     * @param t the current thread
+     * @param firstValue value for the initial entry of the map
+     */
+    void createMap(Thread t, T firstValue) {
+        t.threadLocals = new ThreadLocalMap(this, firstValue);
+    }
+}
+```
+
+ThreadLocalMap 类
+
+```java
+/**
+ * ThreadLocalMap is a customized hash map suitable only for
+ * maintaining thread local values. No operations are exported
+ * outside of the ThreadLocal class. The class is package private to
+ * allow declaration of fields in class Thread.  To help deal with
+ * very large and long-lived usages, the hash table entries use
+ * WeakReferences for keys. However, since reference queues are not
+ * used, stale entries are guaranteed to be removed only when
+ * the table starts running out of space.
+ */
+static class ThreadLocalMap {
+    	/**
+         * The entries in this hash map extend WeakReference, using
+         * its main ref field as the key (which is always a
+         * ThreadLocal object).  Note that null keys (i.e. entry.get()
+         * == null) mean that the key is no longer referenced, so the
+         * entry can be expunged from table.  Such entries are referred to
+         * as "stale entries" in the code that follows.
+         */
+    static class Entry extends WeakReference<ThreadLocal<?>> {
+        /** The value associated with this ThreadLocal. */
+        Object value;
+
+        Entry(ThreadLocal<?> k, Object v) {
+            super(k);
+            value = v;
+        }
+    }
+    
+    /**
+        * Construct a new map initially containing (firstKey, firstValue).
+        * ThreadLocalMaps are constructed lazily, so we only create
+        * one when we have at least one entry to put in it.
+	*/
+    ThreadLocalMap(ThreadLocal<?> firstKey, Object firstValue) {
+        table = new Entry[INITIAL_CAPACITY];
+        int i = firstKey.threadLocalHashCode & (INITIAL_CAPACITY - 1);
+        table[i] = new Entry(firstKey, firstValue);
+        size = 1;
+        setThreshold(INITIAL_CAPACITY);
+    }
+```
+
+常见用法
+
+```java
+public class ThreadLocalTest {
+    private List<String> messages = Lists.newArrayList();
+
+    public static final ThreadLocal<ThreadLocalTest> holder = 
+        ThreadLocal.withInitial(ThreadLocalTest::new);
+
+    public static void add(String message) {
+        holder.get().messages.add(message);
+    }
+
+    public static List<String> clear() {
+        List<String> messages = holder.get().messages;
+        holder.remove();
+
+        System.out.println("size: " + holder.get().messages.size());
+        return messages;
+    }
+
+    public static void main(String[] args) {
+        ThreadLocalTest.add("一枝花算不算浪漫");
+        System.out.println(holder.get().messages);
+        ThreadLocalTest.clear();
+    }
+}
+```
+
+`ThreadLocal`对象可以提供线程局部变量，每个线程`Thread`拥有一份自己的**副本变量**，多个线程互不干扰。
+
+<img src="https://snailclimb.gitee.io/javaguide/docs/java/multi-thread/images/thread-local/2.png" alt="img" style="zoom:67%;" />
+
+> `Thread`类有一个类型为`ThreadLocal.ThreadLocalMap`的实例变量`threadLocals`，也就是说每个线程有一个自己的`ThreadLocalMap`。
+>
+> ```java
+> /* ThreadLocal values pertaining to this thread. This map is maintained
+>  * by the ThreadLocal class. */
+> ThreadLocal.ThreadLocalMap threadLocals = null;
+> ```
+>
+> `ThreadLocalMap`有自己的独立实现，可以简单地将它的`key`视作`ThreadLocal`，`value`为代码中放入的值（实际上`key`并不是`ThreadLocal`本身，而是它的一个**弱引用**）
+
+- **强引用**：我们常常new出来的对象就是强引用类型，只要强引用存在，垃圾回收器将永远不会回收被引用的对象，哪怕内存不足的时候
+- **软引用**：使用 SoftReference 修饰的对象被称为软引用，软引用指向的对象在内存要溢出的时候被回收
+- **弱引用**：使用 WeakReference 修饰的对象被称为弱引用，只要发生垃圾回收，若这个对象只被弱引用指向，那么就会被回收
+- **虚引用**：使用 PhantomReference 进行定义，是最弱的引用。虚引用中唯一的作用就是用队列接收对象即将死亡的通知
+
+```java
+public class ThreadLocalDemo {
+
+    public static void main(String[] args) throws NoSuchFieldException, 
+    								IllegalAccessException, InterruptedException {
+        Thread t = new Thread(()->test("abc",false));
+        t.start();
+        t.join();
+        System.out.println("--gc后--");
+        Thread t2 = new Thread(() -> test("def", true));
+        t2.start();
+        t2.join();
+    }
+
+    private static void test(String s,boolean isGC)  {
+        try {
+            new ThreadLocal<>().set(s);
+            if (isGC) {
+                System.gc();
+            }
+            Thread t = Thread.currentThread();
+            Class<? extends Thread> clz = t.getClass();
+            Field field = clz.getDeclaredField("threadLocals");
+            field.setAccessible(true);
+            Object ThreadLocalMap = field.get(t);
+            Class<?> tlmClass = ThreadLocalMap.getClass();
+            Field tableField = tlmClass.getDeclaredField("table");
+            tableField.setAccessible(true);
+            Object[] arr = (Object[]) tableField.get(ThreadLocalMap);
+            for (Object o : arr) {
+                if (o != null) {
+                    Class<?> entryClass = o.getClass();
+                    Field valueField = entryClass.getDeclaredField("value");
+                    Field referenceField = 
+                     entryClass.getSuperclass().getSuperclass().getDeclaredField("referent");
+                    valueField.setAccessible(true);
+                    referenceField.setAccessible(true);
+                    System.out.println(String.format("弱引用key:%s,值:%s", 
+                                                 referenceField.get(o), valueField.get(o)));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+```java
+/* The state of a Reference object is characterized by two attributes.  It
+     * may be either "active", "pending", or "inactive".  It may also be
+     * either "registered", "enqueued", "dequeued", or "unregistered".
+     *
+     *   Active: Subject to special treatment by the garbage collector.  Some
+     *   time after the collector detects that the reachability of the
+     *   referent has changed to the appropriate state, the collector
+     *   "notifies" the reference, changing the state to either "pending" or
+     *   "inactive".
+     *   referent != null; discovered = null, or in GC discovered list.
+     *
+     *   Pending: An element of the pending-Reference list, waiting to be
+     *   processed by the ReferenceHandler thread.  The pending-Reference
+     *   list is linked through the discovered fields of references in the
+     *   list.
+     *   referent = null; discovered = next element in pending-Reference list.
+     *
+     *   Inactive: Neither Active nor Pending.
+     *   referent = null.
+     *
+     *   Registered: Associated with a queue when created, and not yet added
+     *   to the queue.
+     *   queue = the associated queue.
+     *
+     *   Enqueued: Added to the associated queue, and not yet removed.
+     *   queue = ReferenceQueue.ENQUEUE; next = next entry in list, or this to
+     *   indicate end of list.
+     *
+     *   Dequeued: Added to the associated queue and then removed.
+     *   queue = ReferenceQueue.NULL; next = this.
+     *
+     *   Unregistered: Not associated with a queue when created.
+     *   queue = ReferenceQueue.NULL.
+     *
+     * The collector only needs to examine the referent field and the
+     * discovered field to determine whether a (non-FinalReference) Reference
+     * object needs special treatment.  If the referent is non-null and not
+     * known to be live, then it may need to be discovered for possible later
+     * notification.  But if the discovered field is non-null, then it has
+     * already been discovered.
+     *
+     * FinalReference (which exists to support finalization) differs from
+     * other references, because a FinalReference is not cleared when
+     * notified.  The referent being null or not cannot be used to distinguish
+     * between the active state and pending or inactive states.  However,
+     * FinalReferences do not support enqueue().  Instead, the next field of a
+     * FinalReference object is set to "this" when it is added to the
+     * pending-Reference list.  The use of "this" as the value of next in the
+     * enqueued and dequeued states maintains the non-active state.  An
+     * additional check that the next field is null is required to determine
+     * that a FinalReference object is active.
+     *
+     * Initial states:
+     *   [active/registered]
+     *   [active/unregistered] [1]
+     *
+     * Transitions:
+     *                            clear
+     *   [active/registered]     ------->   [inactive/registered]
+     *          |                                 |
+     *          |                                 | enqueue [2]
+     *          | GC              enqueue [2]     |
+     *          |                -----------------|
+     *          |                                 |
+     *          v                                 |
+     *   [pending/registered]    ---              v
+     *          |                   | ReferenceHandler
+     *          | enqueue [2]       |--->   [inactive/enqueued]
+     *          v                   |             |
+     *   [pending/enqueued]      ---              |
+     *          |                                 | poll/remove
+     *          | poll/remove                     |
+     *          |                                 |
+     *          v            ReferenceHandler     v
+     *   [pending/dequeued]      ------>    [inactive/dequeued]
+     *
+     *
+     *                           clear/enqueue/GC [3]
+     *   [active/unregistered]   ------
+     *          |                      |
+     *          | GC                   |
+     *          |                      |--> [inactive/unregistered]
+     *          v                      |
+     *   [pending/unregistered]  ------
+     *                           ReferenceHandler
+     *
+     * Terminal states:
+     *   [inactive/dequeued]
+     *   [inactive/unregistered]
+     *
+     * Unreachable states (because enqueue also clears):
+     *   [active/enqeued]
+     *   [active/dequeued]
+     *
+     * [1] Unregistered is not permitted for FinalReferences.
+     *
+     * [2] These transitions are not possible for FinalReferences, making
+     * [pending/enqueued] and [pending/dequeued] unreachable, and
+     * [inactive/registered] terminal.
+     *
+     * [3] The garbage collector may directly transition a Reference
+     * from [active/unregistered] to [inactive/unregistered],
+     * bypassing the pending-Reference list.
+     */
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+## 6.线程池原理
+
+### 6.1为什么要使用线程池
+
+使用线程池主要有以下三个原因：
+
+1. 创建/销毁线程需要消耗系统资源，线程池可以**复用已创建的线程**。
+2. **控制并发的数量**。并发数量过多，可能会导致资源消耗过多，从而造成服务器崩溃。（主要原因）
+3. **可以对线程做统一管理**。
+
+### 6.2 线程池的原理
+
+Java中的线程池顶层接口是`Executor`接口，`ThreadPoolExecutor`是这个接口的实现类。
+
+我们先看看`ThreadPoolExecutor`类。
+
+**ThreadPoolExecutor提供的构造方法**
+
+一共有四个构造方法：
+
+```java
+// 五个参数的构造函数
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue)
+
+// 六个参数的构造函数-1
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue,
+                          ThreadFactory threadFactory)
+
+// 六个参数的构造函数-2
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue,
+                          RejectedExecutionHandler handler)
+
+// 七个参数的构造函数
+public ThreadPoolExecutor(int corePoolSize,
+                          int maximumPoolSize,
+                          long keepAliveTime,
+                          TimeUnit unit,
+                          BlockingQueue<Runnable> workQueue,
+                          ThreadFactory threadFactory,
+                          RejectedExecutionHandler handler)
+```
+
+**int corePoolSize**：该线程池中**核心线程数最大值**
+
+> 核心线程：线程池中有两类线程，核心线程和非核心线程。核心线程默认情况下会一直存在于线程池中，即使这个核心线程什么都不干（铁饭碗），而非核心线程如果长时间的闲置，就会被销毁（临时工）。
+
+**int maximumPoolSize**：该线程池中**线程总数最大值** 。
+
+> 该值等于核心线程数量 + 非核心线程数量。
+
+**long keepAliveTime**：**非核心线程闲置超时时长**。
+
+> 非核心线程如果处于闲置状态超过该值，就会被销毁。如果设置allowCoreThreadTimeOut(true)，则会也作用于核心线程。
+
+**TimeUnit unit**：keepAliveTime的单位。
+
+****
+
+线程池本身有一个调度线程，这个线程就是用于管理布控整个线程池里的各种任务和事务，例如创建线程、销毁线程、任务队列管理、线程队列管理等等。
+
+故线程池也有自己的状态。`ThreadPoolExecutor`类中定义了一个`volatile int`变量**runState**来表示线程池的状态 ，分别为RUNNING、SHURDOWN、STOP、TIDYING 、TERMINATED。
+
+- 线程池创建后处于**RUNNING**状态。
+
+- 调用shutdown()方法后处于**SHUTDOWN**状态，线程池不能接受新的任务，清除一些空闲worker,会等待阻塞队列的任务完成。
+
+- 调用shutdownNow()方法后处于**STOP**状态，线程池不能接受新的任务，中断所有线程，阻塞队列中没有被执行的任务全部丢弃。此时，poolsize=0,阻塞队列的size也为0。
+
+- 当所有的任务已终止，ctl记录的”任务数量”为0，线程池会变为**TIDYING**状态。接着会执行terminated()函数。
+
+  > ThreadPoolExecutor中有一个控制状态的属性叫ctl，它是一个AtomicInteger类型的变量。
+
+- 线程池处在TIDYING状态时，**执行完terminated()方法之后**，就会由 **TIDYING -> TERMINATED**， 线程池被设置为TERMINATED状态。
+
+***
+
+
+
+```java
+/**
+ * Executes the given task sometime in the future. The task may execute in a new thread 
+ * or in an existing pooled thread. 
+ * If the task cannot be submitted for execution, either because this executor has been 
+ * shutdown or because its capacity has been reached, the task is handled by the current 
+ * RejectedExecutionHandler.
+ */
+public void execute(Runnable command) {
+    if (command == null)
+        throw new NullPointerException();
+    	/*
+         * Proceed in 3 steps:
+         *
+         * 1. If fewer than corePoolSize threads are running, try to
+         * start a new thread with the given command as its first
+         * task.  The call to addWorker atomically checks runState and
+         * workerCount, and so prevents false alarms that would add
+         * threads when it shouldn't, by returning false.
+         *
+         * 2. If a task can be successfully queued, then we still need
+         * to double-check whether we should have added a thread
+         * (because existing ones died since last checking) or that
+         * the pool shut down since entry into this method. So we
+         * recheck state and if necessary roll back the enqueuing if
+         * stopped, or start a new thread if there are none.
+         *
+         * 3. If we cannot queue task, then we try to add a new
+         * thread.  If it fails, we know we are shut down or saturated
+         * and so reject the task.
+         */
+    //ctl.get()是获取线程池状态，用int类型表示。
+    int c = ctl.get();
+    // 1.当前线程数小于corePoolSize,则调用addWorker创建核心线程执行任务
+    if (workerCountOf(c) < corePoolSize) {
+        if (addWorker(command, true))
+            return;
+        c = ctl.get();
+    }
+     // 2.如果不小于corePoolSize，则将任务添加到workQueue队列。
+    if (isRunning(c) && workQueue.offer(command)) {
+        int recheck = ctl.get();
+        if (! isRunning(recheck) && remove(command))
+            reject(command);
+        else if (workerCountOf(recheck) == 0)
+            addWorker(null, false);
+    }
+    // 3.如果放入workQueue失败，则创建非核心线程执行任务，
+    // 如果这时创建非核心线程失败(当前线程总数不小于maximumPoolSize时)，就会执行拒绝策略
+    else if (!addWorker(command, false))
+        reject(command);
+}
+```
+
+- 线程总数量 < corePoolSize，无论线程是否空闲，都会新建一个核心线程执行任务（让核心线程数量快速达到corePoolSize，在核心线程数量 < corePoolSize时）。**注意，这一步需要获得全局锁。**
+- 线程总数量 >= corePoolSize时，新来的线程任务会进入任务队列中等待，然后空闲的核心线程会依次去缓存队列中取任务来执行（体现了**线程复用**）。 
+- 当缓存队列满了，说明这个时候任务已经多到爆棚，需要一些“临时工”来执行这些任务了。于是会创建非核心线程去执行这个任务。**注意，这一步需要获得全局锁。**
+- 缓存队列满了， 且总线程数达到了maximumPoolSize，则会采取上面提到的拒绝策略进行处理。
+
+**addworker方法**
+
+```java
+private boolean addWorker(Runnable firstTask, boolean core) {
+    retry:
+    for (int c = ctl.get();;) {
+        // Check if queue empty only if necessary.
+        if (runStateAtLeast(c, SHUTDOWN)
+            && (runStateAtLeast(c, STOP)
+                || firstTask != null
+                || workQueue.isEmpty()))
+            return false;
+
+        for (;;) {
+            if (workerCountOf(c)
+                >= ((core ? corePoolSize : maximumPoolSize) & COUNT_MASK))
+                return false;
+            if (compareAndIncrementWorkerCount(c))
+                break retry;
+            c = ctl.get();  // Re-read ctl
+            if (runStateAtLeast(c, SHUTDOWN))
+                continue retry;
+            // else CAS failed due to workerCount change; retry inner loop
+        }
+    }
+```
+
+上半部分为判断线程池是否已满
+
+```java
+	boolean workerStarted = false;
+    boolean workerAdded = false;
+    Worker w = null;
+    try {
+        //创建一个worker对象
+        w = new Worker(firstTask);
+        //实例化一个Thread对象
+        final Thread t = w.thread;
+        if (t != null) {
+            //线程池全局锁
+            final ReentrantLock mainLock = this.mainLock;
+            mainLock.lock();
+            try {
+                // Recheck while holding lock.
+                // Back out on ThreadFactory failure or if
+                // shut down before lock acquired.
+                int c = ctl.get();
+
+                if (isRunning(c) ||
+                    (runStateLessThan(c, STOP) && firstTask == null)) {
+                    if (t.getState() != Thread.State.NEW)
+                        throw new IllegalThreadStateException();
+                    workers.add(w);
+                    workerAdded = true;
+                    int s = workers.size();
+                    if (s > largestPoolSize)
+                        largestPoolSize = s;
+                }
+            } finally {
+                mainLock.unlock();
+            }
+            if (workerAdded) {
+                t.start();
+                workerStarted = true;
+            }
+        }
+    } finally {
+        if (! workerStarted)
+            addWorkerFailed(w);
+    }
+    return workerStarted;
+}
+```
+
+创建`worker`对象，并初始化一个`Thread`对象，然后启动这个线程对象。
+
+我们接着看看`Worker`类，仅展示部分源码：
+
+```java
+// Worker类部分源码
+private final class Worker extends AbstractQueuedSynchronizer implements Runnable{
+    final Thread thread;
+    Runnable firstTask;
+
+    Worker(Runnable firstTask) {
+        setState(-1); // inhibit interrupts until runWorker
+        this.firstTask = firstTask;
+        this.thread = getThreadFactory().newThread(this);
+    }
+
+    public void run() {
+            runWorker(this);
+    }
+    //其余代码略...
+}
+```
+
+`Worker`类实现了`Runnable`接口，所以`Worker`也是一个线程任务。在构造方法中，创建了一个线程，线程的任务就是自己。故`addWorker`方法调用addWorker方法源码下半部分中的第4步`t.start`，会触发`Worker`类的`run`方法被JVM调用。
+
+我们再看看`runWorker`的逻辑：
+
+```java
+// Worker.runWorker方法源代码
+final void runWorker(Worker w) {
+    Thread wt = Thread.currentThread();
+    Runnable task = w.firstTask;
+    w.firstTask = null;
+    // 1.线程启动之后，通过unlock方法释放锁
+    w.unlock(); // allow interrupts
+    boolean completedAbruptly = true;
+    try {
+        // 2.Worker执行firstTask或从workQueue中获取任务，如果getTask方法不返回null,循环不退出
+        while (task != null || (task = getTask()) != null) {
+            // 2.1进行加锁操作，保证thread不被其他线程中断（除非线程池被中断）
+            w.lock();
+            // If pool is stopping, ensure thread is interrupted;
+            // if not, ensure thread is not interrupted.  This
+            // requires a recheck in second case to deal with
+            // shutdownNow race while clearing interrupt
+            // 2.2检查线程池状态，倘若线程池处于中断状态，当前线程将中断。 
+            if ((runStateAtLeast(ctl.get(), STOP) ||
+                 (Thread.interrupted() &&
+                  runStateAtLeast(ctl.get(), STOP))) &&
+                !wt.isInterrupted())
+                wt.interrupt();
+            try {
+                // 2.3执行beforeExecute 
+                beforeExecute(wt, task);
+                Throwable thrown = null;
+                try {
+                    // 2.4执行任务
+                    task.run();
+                } catch (RuntimeException x) {
+                    thrown = x; throw x;
+                } catch (Error x) {
+                    thrown = x; throw x;
+                } catch (Throwable x) {
+                    thrown = x; throw new Error(x);
+                } finally {
+                    // 2.5执行afterExecute方法 
+                    afterExecute(task, thrown);
+                }
+            } finally {
+                task = null;
+                w.completedTasks++;
+                // 2.6解锁操作
+                w.unlock();
+            }
+        }
+        completedAbruptly = false;
+    } finally {
+        processWorkerExit(w, completedAbruptly);
+    }
+}
+```
+
+首先去执行创建这个worker时就有的任务，当执行完这个任务后，worker的生命周期并没有结束，在`while`循环中，worker会不断地调用`getTask`方法从**阻塞队列**中获取任务然后调用`task.run()`执行任务,从而达到**复用线程**的目的。只要`getTask`方法不返回`null`,此线程就不会退出。
+
+```java
+// Worker.getTask方法源码
+private Runnable getTask() {
+    boolean timedOut = false; // Did the last poll() time out?
+
+    for (;;) {
+        int c = ctl.get();
+        int rs = runStateOf(c);
+
+        // Check if queue empty only if necessary.
+        if (rs >= SHUTDOWN && (rs >= STOP || workQueue.isEmpty())) {
+            decrementWorkerCount();
+            return null;
+        }
+
+        int wc = workerCountOf(c);
+
+        // Are workers subject to culling?
+        // 1.allowCoreThreadTimeOut变量默认是false,核心线程即使空闲也不会被销毁
+        // 如果为true,核心线程在keepAliveTime内仍空闲则会被销毁。 
+        boolean timed = allowCoreThreadTimeOut || wc > corePoolSize;
+        // 2.如果运行线程数超过了最大线程数，但是缓存队列已经空了，这时递减worker数量。 
+　　　　 // 如果有设置允许线程超时或者线程数量超过了核心线程数量，
+        // 并且线程在规定时间内均未poll到任务且队列为空则递减worker数量
+        if ((wc > maximumPoolSize || (timed && timedOut))
+            && (wc > 1 || workQueue.isEmpty())) {
+            if (compareAndDecrementWorkerCount(c))
+                return null;
+            continue;
+        }
+
+        try {
+            // 3.如果timed为true(想想哪些情况下timed为true),则会调用workQueue的poll方法获取任务.
+            // 超时时间是keepAliveTime。如果超过keepAliveTime时长，
+            // poll返回了null，上边提到的while循序就会退出，线程也就执行完了。
+            // 如果timed为false（allowCoreThreadTimeOut为falsefalse
+            // 且wc > corePoolSize为false），则会调用workQueue的take方法阻塞在当前。
+            // 队列中有任务加入时，线程被唤醒，take方法返回任务，并执行。
+            Runnable r = timed ?
+                workQueue.poll(keepAliveTime, TimeUnit.NANOSECONDS) :
+                workQueue.take();
+            if (r != null)
+                return r;
+            timedOut = true;
+        } catch (InterruptedException retry) {
+            timedOut = false;
+        }
+    }
+}
+```
+

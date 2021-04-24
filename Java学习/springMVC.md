@@ -347,3 +347,417 @@ Ctrl+H即可查看
 <img src="C:\Users\13793\Desktop\学习笔记\Java学习\image-20210402103601095.png" alt="image-20210402103601095" style="zoom:50%;" />
 
 <img src="C:\Users\13793\Desktop\学习笔记\Java学习\image-20210402103626679.png" alt="image-20210402103626679" style="zoom:67%;" />
+
+***
+
+### 测试接口 MockMvc
+
+
+
+
+
+***
+
+### 全局返回
+
+在我们提供后端 API 给前端时，我们需要告前端，这个 API 调用结果是否成功：
+
+- 如果**成功**，成功的数据是什么。后续，前端会取数据渲染到页面上
+- 如果**失败**，失败的原因是什么。一般，前端会将原因弹出提示给用户
+
+这样，我们就需要有统一的返回结果，而不能是每个接口自己定义自己的风格。一般来说，统一的全局返回信息如下：
+
+- 成功时，返回**成功的状态码** + **数据**
+- 失败时，返回**失败的状态码** + **错误提示**
+
+实际项目在实践时，我们会将状态码放在 Response Body **响应内容**中返回。
+
+在全局统一返回里，我们至少需要定义三个字段：
+
+- `code`：状态码。无论是否成功，必须返回。
+  - 成功时，状态码为 0 。
+  - 失败时，对应业务的错误码。
+
+```java
+// 成功响应
+{
+    code: 0,
+    data: {
+        id: 1,
+        username: "yudaoyuanma"
+    }
+}
+// 失败响应
+{
+    code: 233666,
+    message: "徐妈太丑了"
+}
+
+/**
+ * 通用返回结果
+ *
+ * @param <T> 结果泛型
+ */
+public class CommonResult<T> implements Serializable {
+
+    public static Integer CODE_SUCCESS = 0;
+
+    /**
+     * 错误码
+     */
+    private Integer code;
+    /**
+     * 错误提示
+     */
+    private String message;
+    /**
+     * 返回数据
+     */
+    private T data;
+
+    /**
+     * 将传入的 result 对象，转换成另外一个泛型结果的对象
+     *
+     * 因为 A 方法返回的 CommonResult 对象，不满足调用其的 B 方法的返回，所以需要进行转换。
+     *
+     * @param result 传入的 result 对象
+     * @param <T> 返回的泛型
+     * @return 新的 CommonResult 对象
+     */
+    public static <T> CommonResult<T> error(CommonResult<?> result) {
+        return error(result.getCode(), result.getMessage());
+    }
+
+    public static <T> CommonResult<T> error(Integer code, String message) {
+        Assert.isTrue(!CODE_SUCCESS.equals(code), "code 必须是错误的！");
+        CommonResult<T> result = new CommonResult<>();
+        result.code = code;
+        result.message = message;
+        return result;
+    }
+
+    public static <T> CommonResult<T> success(T data) {
+        CommonResult<T> result = new CommonResult<>();
+        result.code = CODE_SUCCESS;
+        result.data = data;
+        result.message = "";
+        return result;
+    }
+
+    ···
+
+    @JsonIgnore
+    public boolean isSuccess() {
+        return CODE_SUCCESS.equals(code);
+    }
+
+    @JsonIgnore
+    public boolean isError() {
+        return !isSuccess();
+    }
+
+    @Override
+    public String toString() {
+        return "CommonResult{" +
+                "code=" + code +
+                ", message='" + message + '\'' +
+                ", data=" + data +
+                '}';
+    }
+
+}
+```
+
+创建 **GlobalResponseBodyHandler** 类，全局统一返回的处理器。代码如下：
+
+```java
+// GlobalResponseBodyHandler.java
+
+@ControllerAdvice(basePackages = "cn.iocoder.springboot.lab23.springmvc.controller")
+public class GlobalResponseBodyHandler implements ResponseBodyAdvice {
+
+    /**
+     * 实现 #supports(MethodParameter returnType, Class converterType) 方法，返回 true
+     * 表示拦截 Controller 所有 API 接口的返回结果
+     */
+    @Override
+    public boolean supports(MethodParameter returnType, Class converterType) {
+        return true;
+    }
+
+    @Override
+    public Object beforeBodyWrite(Object body, 
+                                  MethodParameter returnType, 
+                                  MediaType selectedContentType, 
+                                  Class selectedConverterType,
+                                  ServerHttpRequest request, 
+                                  ServerHttpResponse response) {
+        // 如果已经是 CommonResult 类型，则直接返回
+        if (body instanceof CommonResult) {
+            return body;
+        }
+        // 如果不是，则包装成 CommonResult 类型
+        return CommonResult.success(body);
+    }
+
+}
+```
+
+- 在 SpringMVC 中，可以使用通过实现 [ResponseBodyAdvice](https://github.com/spring-projects/spring-framework/blob/master/spring-webmvc/src/main/java/org/springframework/web/servlet/mvc/method/annotation/ResponseBodyAdvice.java) 接口，并添加 [`@ControllerAdvice`](https://github.com/spring-projects/spring-framework/blob/master/spring-web/src/main/java/org/springframework/web/bind/annotation/ControllerAdvice.java) 接口，拦截 Controller 的返回结果。注意，我们这里 `@ControllerAdvice` 注解，设置了 `basePackages` 属性，**只拦截** `"cn.iocoder.springboot.lab23.springmvc.controller"` 包
+
+```java
+package com.macro.mall.tiny.common.api;
+
+/**
+ * 通用返回对象
+ *
+ * @author macro
+ * @date 2019/4/19
+ */
+public class CommonResult<T> {
+    private long code;
+    private String message;
+    private T data;
+
+    protected CommonResult() {
+    }
+
+    protected CommonResult(long code, String message, T data) {
+        this.code = code;
+        this.message = message;
+        this.data = data;
+    }
+
+    /**
+     * 成功返回结果
+     *
+     * @param data 获取的数据
+     */
+    public static <T> CommonResult<T> success(T data) {
+        return new CommonResult<T>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMessage(), data);
+    }
+
+    /**
+     * 成功返回结果
+     *
+     * @param data 获取的数据
+     * @param  message 提示信息
+     */
+    public static <T> CommonResult<T> success(T data, String message) {
+        return new CommonResult<T>(ResultCode.SUCCESS.getCode(), message, data);
+    }
+
+    /**
+     * 失败返回结果
+     * @param errorCode 错误码
+     */
+    public static <T> CommonResult<T> failed(IErrorCode errorCode) {
+        return new CommonResult<T>(errorCode.getCode(), errorCode.getMessage(), null);
+    }
+
+    /**
+     * 失败返回结果
+     * @param message 提示信息
+     */
+    public static <T> CommonResult<T> failed(String message) {
+        return new CommonResult<T>(ResultCode.FAILED.getCode(), message, null);
+    }
+
+    /**
+     * 失败返回结果
+     */
+    public static <T> CommonResult<T> failed() {
+        return failed(ResultCode.FAILED);
+    }
+
+    /**
+     * 参数验证失败返回结果
+     */
+    public static <T> CommonResult<T> validateFailed() {
+        return failed(ResultCode.VALIDATE_FAILED);
+    }
+
+    /**
+     * 参数验证失败返回结果
+     * @param message 提示信息
+     */
+    public static <T> CommonResult<T> validateFailed(String message) {
+        return new CommonResult<T>(ResultCode.VALIDATE_FAILED.getCode(), message, null);
+    }
+
+    /**
+     * 未登录返回结果
+     */
+    public static <T> CommonResult<T> unauthorized(T data) {
+        return new CommonResult<T>(ResultCode.UNAUTHORIZED.getCode(), 
+                                   ResultCode.UNAUTHORIZED.getMessage(), data);
+    }
+
+    /**
+     * 未授权返回结果
+     */
+    public static <T> CommonResult<T> forbidden(T data) {
+        return new CommonResult<T>(ResultCode.FORBIDDEN.getCode(), ResultCode.FORBIDDEN.getMessage(), data);
+    }
+
+    public long getCode() {
+        return code;
+    }
+
+    public void setCode(long code) {
+        this.code = code;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
+    }
+
+    public T getData() {
+        return data;
+    }
+
+    public void setData(T data) {
+        this.data = data;
+    }
+}
+```
+
+
+
+```java
+package com.macro.mall.tiny.common.api;
+
+import com.github.pagehelper.PageInfo;
+
+import java.util.List;
+
+/**
+ * 分页数据封装类
+ * Created by macro on 2019/4/19.
+ */
+public class CommonPage<T> {
+    private Integer pageNum;
+    private Integer pageSize;
+    private Integer totalPage;
+    private Long total;
+    private List<T> list;
+
+    /**
+     * 将PageHelper分页后的list转为分页信息
+     */
+    public static <T> CommonPage<T> restPage(List<T> list) {
+        CommonPage<T> result = new CommonPage<T>();
+        PageInfo<T> pageInfo = new PageInfo<T>(list);
+        result.setTotalPage(pageInfo.getPages());
+        result.setPageNum(pageInfo.getPageNum());
+        result.setPageSize(pageInfo.getPageSize());
+        result.setTotal(pageInfo.getTotal());
+        result.setList(pageInfo.getList());
+        return result;
+    }
+
+    public Integer getPageNum() {
+        return pageNum;
+    }
+
+    public void setPageNum(Integer pageNum) {
+        this.pageNum = pageNum;
+    }
+
+    public Integer getPageSize() {
+        return pageSize;
+    }
+
+    public void setPageSize(Integer pageSize) {
+        this.pageSize = pageSize;
+    }
+
+    public Integer getTotalPage() {
+        return totalPage;
+    }
+
+    public void setTotalPage(Integer totalPage) {
+        this.totalPage = totalPage;
+    }
+
+    public List<T> getList() {
+        return list;
+    }
+
+    public void setList(List<T> list) {
+        this.list = list;
+    }
+
+    public Long getTotal() {
+        return total;
+    }
+
+    public void setTotal(Long total) {
+        this.total = total;
+    }
+}
+```
+
+```java
+package com.macro.mall.tiny.common.api;
+
+/**
+ * 枚举了一些常用API操作码
+ *
+ * @author macro
+ * @date 2019/4/19
+ */
+public enum ResultCode implements IErrorCode {
+    /**
+     *
+     */
+    SUCCESS(200, "操作成功"),
+    FAILED(500, "操作失败"),
+    VALIDATE_FAILED(404, "参数检验失败"),
+    UNAUTHORIZED(401, "暂未登录或token已经过期"),
+    FORBIDDEN(403, "没有相关权限");
+    private long code;
+    private String message;
+
+    ResultCode(long code, String message) {
+        this.code = code;
+        this.message = message;
+    }
+
+    @Override
+    public long getCode() {
+        return code;
+    }
+
+    @Override
+    public String getMessage() {
+        return message;
+    }
+}
+
+```
+
+```java
+package com.macro.mall.tiny.common.api;
+
+/**
+ * 封装API的错误码
+ *
+ * @author macro
+ * @date 2019/4/19
+ */
+public interface IErrorCode {
+    long getCode();
+
+    String getMessage();
+}
+
+```
+
+
+
+### 全局异常处理

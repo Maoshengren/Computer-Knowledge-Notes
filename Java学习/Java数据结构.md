@@ -1564,6 +1564,33 @@ public class MyArrayList<E> extends MyAbstractList<E> {
 
 ## Java
 
+### 类文件结构
+
+- Class文件采用类似于C语言的伪结构来存储数据，只有两种数据类型：“无符号数” 和 “表” 
+  - 无符号数：u1、u2、u4、u8分别代表对应字节数的无符号数
+  - 表：多个无符号数或表复合而成
+- **魔数**：每个Class文件的头4个字节
+  - 确定这个文件是否为一个能被虚拟机接受的Class文件
+  - `0xCAFEBABE`
+- 魔数后4个字节为Class文件**版本号**：前两个为次版本号，后两个为主版本号
+- **常量池**：
+  - 入口为u2类型计数器，代表常量池容量计数值（从1开始）
+  - 存放两大类常量：字面量和符号引用
+    - 每个常量都是一个表：共有17中不同类型的常量。各自有着完全独立的数据结构
+      - 起始第一位是u1类型的标志位
+- **访问标志**：表明Class为类还是接口，是public还是abstract
+- **字段表：**即接口或类中声明的变量
+- **方法表：**与字段表基本一致，除了一些修饰符
+- **属性表**：
+
+
+
+
+
+
+
+
+
 ### 类加载
 
 - JVM 中内置了三个重要的 ClassLoader，除了 BootstrapClassLoader 其他类加载器均由 Java 实现且全部继承自`java.lang.ClassLoader`：
@@ -1656,8 +1683,6 @@ protected Class<?> loadClass(String name, boolean resolve)
 
 
 
-
-
 ### 反射机制
 
 > Java反射即指程序在运行期可以**拿到一个对象的所有信息**
@@ -1696,7 +1721,7 @@ String s = "Hello";
 Class cls = s.getClass();
 ```
 
-3. 如果知道一个`class`的完整类名，可以通过静态方法`Class.forName()`获取：
+3. 如果知道一个`class`的**完整类名**，可以通过静态方法`Class.forName()`获取：
 
 ```
 Class cls = Class.forName("java.lang.String");
@@ -3099,11 +3124,11 @@ public class LambdaExpressionExample9{
         Thread t1=new Thread(r1);  
         t1.start();  
         //Thread Example with lambda  
-        Runnable r2=()->{  
+        Runnable r2 = ()->{  
                 System.out.println("Thread2 is running...");  
         };  
-        Thread t2=new Thread(r2);  
-        t2.start();  \\可以把r2换成等号右边的式子
+        Thread t2 = new Thread(r2);  
+        t2.start();  //可以把r2换成等号右边的式子
         
         Thread t3 = new Thread(()->{  
                 System.out.println("Thread2 is running...");  

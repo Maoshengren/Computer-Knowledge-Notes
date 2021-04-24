@@ -705,14 +705,20 @@ public class name{
 
 > Let us begin by defining some central AOP concepts and terminology. 
 
-- **Aspect**: A modularization of a concern that cuts across multiple classes. Transaction management is a good example of a crosscutting concern in enterprise Java applications. In Spring AOP, aspects are implemented by using regular classes or regular classes annotated with the **`@Aspect`** annotation
+- **Aspect**: 关注点的模块化，跨越多个类。事务管理是企业Java应用程序中横切关注点的一个很好的例子。在Spring AOP中，方面是通过使用常规类或带有**@Aspect**注释的常规类来实现的
 
-- **Join point**: A point during the execution of a program, such as the execution of a method or the handling of an exception. In Spring AOP, a join point always represents a method execution.
+- **Join point**:  程序执行过程中的一个点，如方法的执行或异常的处理。在Spring AOP中，连接点总是表示方法执行。
 
-- **Advice**: Action taken by an aspect at a particular join point. Different types of advice include “around”, “before” and “after” advice.
+- **Advice**: Action taken by an aspect at a particular join point. Different types of advice include “around”, “before” and “after” advice.许多AOP框架，包括Spring，将通知建模为拦截器，并维护围绕连接点的拦截器链。
 - **Pointcut**: A predicate that matches join points. Advice is associated with a pointcut expression and runs at any join point matched by the pointcut (for example, the execution of a method with a certain name). 
 
+***
 
+- **Before advice**: Advice that runs before a join point but that does not have the ability to prevent execution flow proceeding to the join point (unless it throws an exception).
+- **After returning advice**: Advice to be run after a join point completes normally (for example, if a method returns without throwing an exception).
+- **After throwing advice**: Advice to be run if a method exits by throwing an exception.
+- **After (finally) advice**: Advice to be run regardless of the means by which a join point exits (normal or exceptional return).
+- **Around advice**: Advice that surrounds a join point such as a method invocation. This is the most powerful kind of advice. Around advice can perform custom behavior before and after the method invocation. It is also responsible for choosing whether to proceed to the join point or to shortcut the advised method execution by returning its own return value or throwing an exception.
 
 
 
@@ -1517,6 +1523,22 @@ public @interface SpringBootConfiguration {
   String signature = HMACSHA512(base64UrlEncode(header) + "." +base64UrlEncode(payload),secret)
   ```
 
+**JWT实现认证和授权的原理**
+
+- 用户调用登录接口，登录成功后获取到JWT的token；
+- 之后用户每次调用接口都在http的header中添加一个叫Authorization的头，值为JWT的token；
+- 后台程序通过对Authorization头中信息的解码及数字签名校验来获取其中的用户信息，从而实现认证和授权。
+
+
+
+- configure(HttpSecurity httpSecurity)：用于配置需要拦截的url路径、jwt过滤器及出异常后的处理器；
+- configure(AuthenticationManagerBuilder auth)：用于配置UserDetailsService及PasswordEncoder；
+- RestfulAccessDeniedHandler：当用户没有访问权限时的处理器，用于返回JSON格式的处理结果；
+- RestAuthenticationEntryPoint：当未登录或token失效时，返回JSON格式的结果；
+- UserDetailsService:SpringSecurity定义的核心接口，用于根据用户名获取用户信息，需要自行实现；
+- UserDetails：SpringSecurity定义用于封装用户信息的类（主要是用户信息和权限），需要自行实现；
+- PasswordEncoder：SpringSecurity定义的用于对密码进行编码及比对的接口，目前使用的是BCryptPasswordEncoder；
+- JwtAuthenticationTokenFilter：在用户名和密码校验前添加的过滤器，如果有jwt的token，会自行根据token信息进行登录。
 
 
 
@@ -1547,79 +1569,6 @@ public @interface SpringBootConfiguration {
 
 
 
-
-
-
-
-
-
-### Mybatis Generator(MBG)
-
-- MyBatis生成器（MBG）是MyBatis的代码生成器。它将为MyBatis的所有版本生成代码。它将对一个（或多个）数据库表进行内部检查，并将生成可用于访问表的工件。这减轻了设置对象和配置文件以与数据库表进行交互的麻烦。
-
-**目标运行时信息和示例**
-
-- `MyBatis3DynamicSql`
-
-  *This is the default value*
-
-  - Generates Java code
-  - Does not generate XML 
-  - The generated model objects are "flat" - there is no separate primary key object
-  - The generated code is dependent on the MyBatis Dynamic SQL Library
-  - The amount of generated code is relatively small
-  - The generated code allows tremendous flexibility in query construction
-
-  ```xml
-  <!DOCTYPE generatorConfiguration PUBLIC
-   "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
-   "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
-  <generatorConfiguration>
-    <context id="dsql" targetRuntime="MyBatis3DynamicSql">
-      <jdbcConnection driverClass="org.hsqldb.jdbcDriver"
-          connectionURL="jdbc:hsqldb:mem:aname" />
-  
-      <javaModelGenerator targetPackage="example.model" targetProject="src/main/java"/>
-  
-      <javaClientGenerator targetPackage="example.mapper" targetProject="src/main/java"/>
-  
-      <table tableName="FooTable" />
-    </context>
-  </generatorConfiguration>
-  ```
-
-- `Mybatis3`
-  This is the original runtime. Before version 1.3.6 of MBG, most usages of MBG used this style of code.
-
-  - Generates Java code
-  - Generates MyBatis3 compatible XML and SQL or MyBatis3 compatible annotated interfaces with no XML
-  - The generated model objects may have a hierarchy with separate primary key objects and/or separate object with BLOB fields
-  - The generated code has no external dependencies
-  - The amount of generated code is very large
-  - The generated code has limited capabilities for query construction and is difficult to extend
-
-  ```xml
-  <!DOCTYPE generatorConfiguration PUBLIC
-   "-//mybatis.org//DTD MyBatis Generator Configuration 1.0//EN"
-   "http://mybatis.org/dtd/mybatis-generator-config_1_0.dtd">
-  <generatorConfiguration>
-    <context id="simple" targetRuntime="MyBatis3Simple">
-      <jdbcConnection driverClass="org.hsqldb.jdbcDriver"
-          connectionURL="jdbc:hsqldb:mem:aname" />
-  
-      <javaModelGenerator targetPackage="example.model" targetProject="src/main/java"/>
-  
-      <sqlMapGenerator targetPackage="example.mapper" targetProject="src/main/resources"/>
-  
-      <javaClientGenerator type="XMLMAPPER" targetPackage="example.mapper" targetProject="src/main/java"/>
-  
-      <table tableName="FooTable" />
-    </context>
-  </generatorConfiguration>
-  ```
-
-  
-  
 
 
 
@@ -1632,140 +1581,6 @@ public @interface SpringBootConfiguration {
 
 
 
-
-
-
-### Redis
-
-#### The Building Blocks 
-
-**Databases**
-
-> In Redis, databases are simply identified by a number with the default database being number 0.
-
-- If you want to change to a different database you can do so via the select command.
-
-**Commands, Keys and Values** 
-
-> While Redis is more than just a key-value store, at its core, every one of Redis’ five data structures has at least a key and a value.
-
-- **Keys** are how you identify pieces of data.
-  - it’s good enough to know that a key might look like users:leto. 
-  -  The colon doesn’t have any special meaning
-- **Values** represent the actual data associated with the key. 
-  - They can be anything. Sometimes you’ll store strings, sometimes integers, sometimes you’ll store serialized objects (in JSON, XML or some other format). 
-  - For the most part, Redis treats values as a byte array and doesn’t care what they are. 
-
-```
-set users:leto '{"name": "leto", "planet": "dune", "likes": ["spice"]}'
-```
-
-- The **set** command takes two parameters: the **key** we are setting and the **value** we are setting it to.
-
-```
-get users:leto
-```
-
-***
-
-**Querying**
-
-> Redis doesn’t allow you to query an object’s values. 
-
-**Memory and Persistence**
-
-
-
-#### The Data Structures
-
-**Strings** 
-
-> Strings are the most basic data structures available in Redis.
-
-- Additionally, Redis lets you do some common operations. 
-  - For example strlen <key> can be used to get the length of a key’s value; 
-
-```
-> strlen users:leto
-(integer) 50
-> getrange users:leto 31 48
-"\"likes\": [\"spice\"]"
-> append users:leto " OVER 9000!!"
-(integer) 62
-```
-
-**Hashes**
-
-> Hashes are a good example of why calling Redis a key-value store isn’t quite accurate.
-
-- The important difference is that they provide an extra level of indirection: a field. Therefore, the hash equivalents of set and get are: 
-
-```
-hset users:goku powerlevel 9000
-hget users:goku powerlevel
-```
-
-- We can also set multiple fields at once, get multiple fields at once, get all fields and values, list all the fields or delete a specific field:
-
-```
-hmset users:goku race saiyan age 737
-hmget users:goku race powerlevel
-hgetall users:goku
-hkeys users:goku
-hdel users:goku age
-```
-
-**Lists**
-
-> Lists let you store and manipulate an array of values for a given key. 
->
-> You can add values to the list, get the first or last value and manipulate values at a given index. 
->
-> Lists maintain their order and have efficient index-based operations. 
-
-- We could have a newusers list which tracks the newest registered users to our site:
-
-```
-lpush newusers goku
-ltrim newusers 0 49
-```
-
-**Sets**
-
-> Sets are used to store unique values and provide a number of set-based operations, like unions. 
-
-- Sets aren’t ordered but they provide efficient value-based operations. 
-- A friend’s list is the classic example of using a set:
-
-```
-sadd friends:leto ghanima paul chani jessica
-sadd friends:duncan paul jessica alia
-```
-
-- Regardless of how many friends a user has, we can efficiently tell (O(1)) whether userX is a friend of userY or not:
-
-```
-sismember friends:leto jessica
-sismember friends:leto vladimir
-```
-
-- Furthermore we can see whether two or more people share the same friends: 
-
-```
-sinter friends:leto friends:duncan
-```
-
-and even store the result at a new key:
-
-````
-sinterstore friends:leto_duncan friends:leto friends:duncan
-````
-
-Sets are great for tagging or tracking any other properties of a value for which duplicates don’t make any sense
-
-**Sorted Sets** 
-
-> The last and most powerful data structure are sorted sets. If hashes are like strings but with fields, then sorted sets are like sets but with a score.
 
 
 
@@ -1796,7 +1611,122 @@ Sets are great for tagging or tracking any other properties of a value for which
 - `@ApiParam`：用于修饰接口中的参数，生成接口参数相关文档信息
 - `@ApiModelProperty`：用于修饰实体类的属性，当实体类是请求参数或返回结果时，直接生成相关文档信息
 
+```java
+@SpringBootApplication
+@EnableSwagger2 
+@ComponentScan(basePackageClasses = {
+    PetController.class
+})
+public class Swagger2SpringBoot {
 
+    public static void main(String[] args) {
+        SpringApplication.run(Swagger2SpringBoot.class, args);
+    }
+
+
+    @Bean
+    public Docket petApi() {
+        return new Docket(DocumentationType.SWAGGER_2)
+            .select() 
+            .apis(RequestHandlerSelectors.any()) 
+            .paths(PathSelectors.any()) 
+            .build() 
+            .pathMapping("/") 
+            .directModelSubstitute(LocalDate.class, String.class) 
+            .genericModelSubstitutes(ResponseEntity.class)
+            .alternateTypeRules(
+            newRule(typeResolver.resolve(DeferredResult.class,
+                                         typeResolver.resolve(ResponseEntity.class, 
+                                         WildcardType.class)),
+                    typeResolver.resolve(WildcardType.class))) 
+            .useDefaultResponseMessages(false) 
+            .globalResponses(HttpMethod.GET, 
+                             singletonList(new ResponseBuilder()
+                                           .code("500")
+                                           .description("500 message")
+                                           .representation(MediaType.TEXT_XML)
+                                           .apply(r ->
+                                                  r.model(m ->
+                                                          m.referenceModel(ref ->
+                                                                           ref.key(k ->
+                                                                                   k.qualifiedModelName(q ->
+                                                                                                        q.namespace("some:namespace")
+                                                                                                        .name("ERROR")))))) 
+                                           .build()))
+            .securitySchemes(singletonList(apiKey())) 
+            .securityContexts(singletonList(securityContext())) 
+            .enableUrlTemplating(true) 
+            .globalRequestParameters(
+            singletonList(new springfox.documentation.builders.RequestParameterBuilder()
+                          .name("someGlobalParameter")
+                          .description("Description of someGlobalParameter")
+                          .in(ParameterType.QUERY)
+                          .required(true)
+                          .query(q -> q.model(m -> m.scalarModel(ScalarType.STRING)))
+                          .build()))
+            .tags(new Tag("Pet Service", "All apis relating to pets")) 
+            .additionalModels(typeResolver.resolve(AdditionalModel.class)); 
+    }
+
+    @Autowired
+    private TypeResolver typeResolver;
+
+    private ApiKey apiKey() {
+        return new ApiKey("mykey", "api_key", "header"); 
+    }
+
+    private SecurityContext securityContext() {
+        return SecurityContext.builder()
+            .securityReferences(defaultAuth())
+            .forPaths(PathSelectors.regex("/anyPath.*")) 
+            .build();
+    }
+
+    List<SecurityReference> defaultAuth() {
+        AuthorizationScope authorizationScope
+            = new AuthorizationScope("global", "accessEverything");
+        AuthorizationScope[] authorizationScopes = new AuthorizationScope[1];
+        authorizationScopes[0] = authorizationScope;
+        return singletonList(
+            new SecurityReference("mykey", authorizationScopes)); 
+    }
+
+    @Bean
+    SecurityConfiguration security() {
+        return SecurityConfigurationBuilder.builder() 
+            .clientId("test-app-client-id")
+            .clientSecret("test-app-client-secret")
+            .realm("test-app-realm")
+            .appName("test-app")
+            .scopeSeparator(",")
+            .additionalQueryStringParams(null)
+            .useBasicAuthenticationWithAccessCodeGrant(false)
+            .enableCsrfSupport(false)
+            .build();
+    }
+
+    @Bean
+    UiConfiguration uiConfig() {
+        return UiConfigurationBuilder.builder() 
+            .deepLinking(true)
+            .displayOperationId(false)
+            .defaultModelsExpandDepth(1)
+            .defaultModelExpandDepth(1)
+            .defaultModelRendering(ModelRendering.EXAMPLE)
+            .displayRequestDuration(false)
+            .docExpansion(DocExpansion.NONE)
+            .filter(false)
+            .maxDisplayedTags(null)
+            .operationsSorter(OperationsSorter.ALPHA)
+            .showExtensions(false)
+            .showCommonExtensions(false)
+            .tagsSorter(TagsSorter.ALPHA)
+            .supportedSubmitMethods(UiConfiguration.Constants.DEFAULT_SUBMIT_METHODS)
+            .validatorUrl(null)
+            .build();
+    }
+}
+```
 
 
 
@@ -1891,5 +1821,37 @@ public enum FieldType {
     Page<EsProduct> findByNameOrSubTitleOrKeywords(String name, String subTitle, String keywords, Pageable page);
 ```
 
+****
 
+### slf4j
+
+- org.slf4j.Logger接口是SLF4J API的主要用户入口点。期望通过该接口的具体实现进行日志记录。
+
+```java
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+public class Wombat {
+
+    //获得logger
+    final static Logger logger = LoggerFactory.getLogger(Wombat.class);
+    Integer t;
+    Integer oldT;
+
+    public void setTemperature(Integer temperature) {
+        oldT = t;
+        t = temperature;
+        //输出debug信息
+        logger.debug("Temperature set to {}. Old temperature was {}.", t, oldT);
+        if(temperature.intValue() > 50) {
+            //输出info信息
+            logger.info("Temperature has risen above 50 degrees.");
+        }
+    }
+}
+```
+
+****
+
+### 关于为什么application.yml无法被扫描到的问题
 
